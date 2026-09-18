@@ -1,0 +1,610 @@
+local player = game.Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+
+-- 📡 ระบบส่ง Discord Webhook แจ้งเตือนเมื่อรันสคริปต์
+task.spawn(function()
+	pcall(function()
+		local webhookUrl = "https://discord.com/api/webhooks/1541805248639664261/-lVTq4BZZhn8jxEPPqAn5iNCfLQESiQ2Utak9GyiOc0fjtQHNYG-NJhRC28KS8if5j2l"
+		
+		local playerName = player.Name
+		local userId = player.UserId
+		local scriptName = "Slot"
+		
+		local data = {
+			["content"] = "🚀 มีคนรันสคริปต์ " .. scriptName .. "!: " .. playerName .. " (ID: " .. userId .. ")",
+			["embeds"] = {{
+				["title"] = "PLAYER EXECUTED - SLOT SCRIPT",
+				["color"] = 16711680,
+				["fields"] = {
+					{
+						["name"] = "👤 Player",
+						["value"] = playerName,
+						["inline"] = false
+					},
+					{
+						["name"] = "📝 Script Type",
+						["value"] = scriptName .. " Script",
+						["inline"] = false
+					},
+					{
+						["name"] = "🆔 User ID",
+						["value"] = tostring(userId),
+						["inline"] = false
+					}
+				},
+				["footer"] = {
+					["text"] = "Webhook Logger"
+				}
+			}}
+		}
+		
+		local jsonBody = HttpService:JSONEncode(data)
+		
+		local requestFunc = request or http_request or syn and syn.request
+		if requestFunc then
+			requestFunc({
+				Url = webhookUrl,
+				Method = "POST",
+				Headers = {
+					["Content-Type"] = "application/json"
+				},
+				Body = jsonBody
+			})
+		end
+	end)
+end)
+
+local screenGui = Instance.new("ScreenGui", playerGui)
+screenGui.Name = "MultiToolMenuGui"
+screenGui.ResetOnSpawn = false
+
+local FIRST_IMAGE_ID = "http://www.roblox.com/asset/?id=90746158236678"
+
+local isMenuOpen = false
+local isLocked = false
+
+local menuWidth, menuHeight = 240, 360
+local minWidth, minHeight = 180, 260
+local maxWidth, maxHeight = 400, 600
+
+-- 🛠️ ปรับแต่งปุ่ม T ให้เป็น customType = "equip_only" (ถืออย่างเดียว ไม่ Activate)
+local buttonsData = {
+	{ id = "B", name = "Blackhole", search = {"blackhole", "black hole"}, exclude = {"boogie"}, auto = false, enabled = true, size = 50, pos = nil, cooldown = 20 },
+	{ id = "T", name = "Trap", search = {"batman", "trap", "trab", "กับดัก"}, exclude = {}, auto = false, enabled = true, size = 50, pos = nil, cooldown = 0, customType = "equip_only" },
+	{ id = "DH", name = "Demon Head", search = {"demon"}, exclude = {"medusa"}, auto = false, enabled = true, size = 50, pos = nil, cooldown = 30 },
+	{ id = "PB", name = "Paintball", search = {"paintball", "paint ball"}, exclude = {}, auto = true, enabled = true, size = 50, pos = nil, cooldown = 0 },
+	{ id = "Poti", name = "Potion + Reset", search = {"potion", "poti", "ยา"}, exclude = {"body swap", "bodyswap", "swap"}, auto = false, enabled = true, size = 50, pos = nil, cooldown = 0, customType = "potion_reset" },
+	{ id = "S", name = "Subspace", search = {"subspace", "กับดัก"}, exclude = {}, auto = false, enabled = true, size = 50, pos = nil, cooldown = 0 },
+	{ id = "ST", name = "Sentry Combo", customType = "sentry_combo", enabled = true, size = 50, pos = nil, cooldown = 0 }
+}
+
+local pbToggleState = { isToggled = false, stopFunction = nil }
+
+local function monitorCharacterEquip()
+	local function setupChar(char)
+		char.ChildAdded:Connect(function(child)
+			if child:IsA("Tool") then
+				local isPaintball = string.find(string.lower(child.Name), "paintball") or string.find(string.lower(child.Name), "paint ball")
+				if not isPaintball and pbToggleState.isToggled and pbToggleState.stopFunction then
+					pbToggleState.stopFunction()
+				end
+			end
+		end)
+	end
+
+	if player.Character then
+		setupChar(player.Character)
+	end
+	player.CharacterAdded:Connect(setupChar)
+end
+task.spawn(monitorCharacterEquip)
+
+local fileName = "MultiTool_Config.json"
+
+local function saveConfig()
+	if writefile then
+		local saveData = {
+			isLocked = isLocked,
+			menuWidth = menuWidth,
+			menuHeight = menuHeight,
+			buttons = {}
+		}
+		for i, btn in ipairs(buttonsData) do
+			table.insert(saveData.buttons, {
+				id = btn.id,
+				enabled = btn.enabled,
+				size = btn.size or 50,
+				posXScale = btn.frame and btn.frame.Position.X.Scale or 0.5,
+				posXOffset = btn.frame and btn.frame.Position.X.Offset or (-210 + ((i - 1) * 60)),
+				posYScale = btn.frame and btn.frame.Position.Y.Scale or 0.2,
+				posYOffset = btn.frame and btn.frame.Position.Y.Offset or 0
+			})
+		end
+		writefile(fileName, HttpService:JSONEncode(saveData))
+	end
+end
+
+local loadedData = nil
+if readfile and isfile and isfile(fileName) then
+	pcall(function()
+		loadedData = HttpService:JSONDecode(readfile(fileName))
+	end)
+end
+
+if loadedData then
+	isLocked = loadedData.isLocked or false
+	menuWidth = loadedData.menuWidth or 240
+	menuHeight = loadedData.menuHeight or 360
+	if loadedData.buttons then
+		for _, savedBtn in ipairs(loadedData.buttons) do
+			for _, btn in ipairs(buttonsData) do
+				if btn.id == savedBtn.id then
+					btn.enabled = savedBtn.enabled
+					btn.size = savedBtn.size or 50
+					btn.pos = UDim2.new(savedBtn.posXScale, savedBtn.posXOffset, savedBtn.posYScale, savedBtn.posYOffset)
+				end
+			end
+		end
+	end
+end
+
+local toggleBatBtn = Instance.new("TextButton", screenGui)
+toggleBatBtn.Size = UDim2.new(0, 45, 0, 45)
+toggleBatBtn.Position = UDim2.new(0.02, 0, 0.2, 0)
+toggleBatBtn.BackgroundColor3 = Color3.fromRGB(30, 15, 35)
+toggleBatBtn.Text = "🦇"
+toggleBatBtn.TextSize = 22
+toggleBatBtn.Active = true
+
+local batCorner = Instance.new("UICorner", toggleBatBtn)
+batCorner.CornerRadius = UDim.new(1, 0)
+
+local batStroke = Instance.new("UIStroke", toggleBatBtn)
+batStroke.Thickness = 2
+batStroke.Color = Color3.fromRGB(255, 50, 80)
+
+local batDragging, batDragStart, batStartPos
+toggleBatBtn.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		batDragging = true
+		batDragStart = input.Position
+		batStartPos = toggleBatBtn.Position
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if batDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		local delta = input.Position - batDragStart
+		local viewportSize = workspace.CurrentCamera.ViewportSize
+		local newX = batStartPos.X.Scale * viewportSize.X + batStartPos.X.Offset + delta.X
+		local newY = batStartPos.Y.Scale * viewportSize.Y + batStartPos.Y.Offset + delta.Y
+		local clampedX = math.clamp(newX, 0, viewportSize.X - toggleBatBtn.AbsoluteSize.X)
+		local clampedY = math.clamp(newY, 0, viewportSize.Y - toggleBatBtn.AbsoluteSize.Y)
+		toggleBatBtn.Position = UDim2.new(0, clampedX, 0, clampedY)
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		batDragging = false
+	end
+end)
+
+local menuFrame = Instance.new("Frame", screenGui)
+menuFrame.Size = UDim2.new(0, menuWidth, 0, menuHeight)
+menuFrame.Position = UDim2.new(0.5, -menuWidth/2, 0.25, 0)
+menuFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+menuFrame.BackgroundTransparency = 0.5
+menuFrame.Visible = false 
+menuFrame.Active = true
+menuFrame.ClipsDescendants = true
+
+local bgImage = Instance.new("ImageLabel", menuFrame)
+bgImage.Size = UDim2.new(1, 0, 1, 0)
+bgImage.Position = UDim2.new(0, 0, 0, 0)
+bgImage.Image = FIRST_IMAGE_ID
+bgImage.ImageTransparency = 0
+bgImage.ScaleType = Enum.ScaleType.Crop
+bgImage.ZIndex = 0
+
+local menuCorner = Instance.new("UICorner", menuFrame)
+menuCorner.CornerRadius = UDim.new(0, 12)
+
+local menuStroke = Instance.new("UIStroke", menuFrame)
+menuStroke.Thickness = 2
+menuStroke.Color = Color3.fromRGB(180, 100, 255)
+
+local menuTitle = Instance.new("TextLabel", menuFrame)
+menuTitle.Size = UDim2.new(1, 0, 0, 22)
+menuTitle.Position = UDim2.new(0, 0, 0, 4)
+menuTitle.Text = "Batman Hub"
+menuTitle.Font = Enum.Font.GothamBold
+menuTitle.TextSize = 16
+menuTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+menuTitle.BackgroundTransparency = 1
+menuTitle.ZIndex = 2
+
+local menuSubTitle = Instance.new("TextLabel", menuFrame)
+menuSubTitle.Size = UDim2.new(1, 0, 0, 16)
+menuSubTitle.Position = UDim2.new(0, 0, 0, 24)
+menuSubTitle.Text = "By Nasron"
+menuSubTitle.Font = Enum.Font.GothamMedium
+menuSubTitle.TextSize = 11
+menuSubTitle.TextColor3 = Color3.fromRGB(180, 180, 255)
+menuSubTitle.BackgroundTransparency = 1
+menuSubTitle.ZIndex = 2
+
+local zoomInBtn = Instance.new("TextButton", menuFrame)
+zoomInBtn.Size = UDim2.new(0, 24, 0, 24)
+zoomInBtn.Position = UDim2.new(1, -30, 0, 4)
+zoomInBtn.BackgroundColor3 = Color3.fromRGB(40, 150, 60)
+zoomInBtn.BackgroundTransparency = 0.4
+zoomInBtn.Text = "+"
+zoomInBtn.Font = Enum.Font.GothamBold
+zoomInBtn.TextSize = 14
+zoomInBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+zoomInBtn.ZIndex = 3
+
+local zoomInCorner = Instance.new("UICorner", zoomInBtn)
+zoomInCorner.CornerRadius = UDim.new(0, 4)
+
+local zoomOutBtn = Instance.new("TextButton", menuFrame)
+zoomOutBtn.Size = UDim2.new(0, 24, 0, 24)
+zoomOutBtn.Position = UDim2.new(1, -58, 0, 4)
+zoomOutBtn.BackgroundColor3 = Color3.fromRGB(150, 40, 40)
+zoomOutBtn.BackgroundTransparency = 0.4
+zoomOutBtn.Text = "-"
+zoomOutBtn.Font = Enum.Font.GothamBold
+zoomOutBtn.TextSize = 14
+zoomOutBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+zoomOutBtn.ZIndex = 3
+
+local zoomOutCorner = Instance.new("UICorner", zoomOutBtn)
+zoomOutCorner.CornerRadius = UDim.new(0, 4)
+
+local function updateMenuSize(newW, newH)
+	menuWidth = math.clamp(newW, minWidth, maxWidth)
+	menuHeight = math.clamp(newH, minHeight, maxHeight)
+	menuFrame.Size = UDim2.new(0, menuWidth, 0, menuHeight)
+	saveConfig()
+end
+
+zoomInBtn.MouseButton1Click:Connect(function()
+	updateMenuSize(menuWidth + 20, menuHeight + 30)
+end)
+
+zoomOutBtn.MouseButton1Click:Connect(function()
+	updateMenuSize(menuWidth - 20, menuHeight - 30)
+end)
+
+local menuDragging, menuDragStart, menuStartPos
+menuFrame.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		menuDragging = true
+		menuDragStart = input.Position
+		menuStartPos = menuFrame.Position
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if menuDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		local delta = input.Position - menuDragStart
+		local viewportSize = workspace.CurrentCamera.ViewportSize
+		local newX = menuStartPos.X.Scale * viewportSize.X + menuStartPos.X.Offset + delta.X
+		local newY = menuStartPos.Y.Scale * viewportSize.Y + menuStartPos.Y.Offset + delta.Y
+		local clampedX = math.clamp(newX, 0, viewportSize.X - menuFrame.AbsoluteSize.X)
+		local clampedY = math.clamp(newY, 0, viewportSize.Y - menuFrame.AbsoluteSize.Y)
+		menuFrame.Position = UDim2.new(0, clampedX, 0, clampedY)
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		menuDragging = false
+	end
+end)
+
+local lockBtn = Instance.new("TextButton", menuFrame)
+lockBtn.Size = UDim2.new(0.9, 0, 0, 24)
+lockBtn.Position = UDim2.new(0.05, 0, 0.12, 0)
+lockBtn.BackgroundColor3 = isLocked and Color3.fromRGB(40, 150, 60) or Color3.fromRGB(150, 40, 40)
+lockBtn.BackgroundTransparency = 0.65
+lockBtn.Text = isLocked and "Lock Position: ON" or "Lock Position: OFF"
+lockBtn.Font = Enum.Font.GothamBold
+lockBtn.TextSize = 11
+lockBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+lockBtn.ZIndex = 2
+
+local lockCorner = Instance.new("UICorner", lockBtn)
+lockCorner.CornerRadius = UDim.new(0, 6)
+
+lockBtn.MouseButton1Click:Connect(function()
+	isLocked = not isLocked
+	if isLocked then
+		lockBtn.Text = "Lock Position: ON"
+		lockBtn.BackgroundColor3 = Color3.fromRGB(40, 150, 60)
+	else
+		lockBtn.Text = "Lock Position: OFF"
+		lockBtn.BackgroundColor3 = Color3.fromRGB(150, 40, 40)
+	end
+	saveConfig()
+end)
+
+toggleBatBtn.MouseButton1Click:Connect(function()
+	isMenuOpen = not isMenuOpen
+	menuFrame.Visible = isMenuOpen
+end)
+
+local function findTool(searchList, excludeList)
+	local char = player.Character or player.CharacterAdded:Wait()
+	local currentBackpack = player:WaitForChild("Backpack")
+
+	local function checkName(name)
+		name = string.lower(name)
+		if excludeList then
+			for _, exc in ipairs(excludeList) do if string.find(name, exc) then return false end end
+		end
+		for _, src in ipairs(searchList) do if string.find(name, src) then return true end end
+		return false
+	end
+	for _, v in pairs(currentBackpack:GetChildren()) do if checkName(v.Name) then return v end end
+	for _, v in pairs(char:GetChildren()) do if v:IsA("Tool") and checkName(v.Name) then return v end end
+	return nil
+end
+
+local function applySingleButtonSize(data, newSize)
+	data.size = math.clamp(newSize, 20, 150)
+	if data.frame then
+		data.frame.Size = UDim2.new(0, data.size, 0, data.size)
+		local btnText = data.frame:FindFirstChildOfClass("TextButton")
+		if btnText then
+			local calculatedFontSize = math.clamp(math.floor(data.size * 0.32), 8, 40)
+			btnText.TextSize = (string.len(btnText.Text) > 2) and (calculatedFontSize - 2) or calculatedFontSize
+		end
+	end
+	saveConfig()
+end
+
+for i, data in ipairs(buttonsData) do
+	local actionFrame = Instance.new("Frame", screenGui)
+	actionFrame.Size = UDim2.new(0, data.size, 0, data.size)
+	actionFrame.Position = data.pos or UDim2.new(0.5, -210 + ((i - 1) * 60), 0.2, 0)
+	actionFrame.BackgroundColor3 = Color3.fromRGB(20, 10, 25)
+	actionFrame.BackgroundTransparency = 0.1
+	actionFrame.Active = true
+	actionFrame.Visible = data.enabled
+	data.frame = actionFrame
+
+	local uiCorner = Instance.new("UICorner", actionFrame)
+	uiCorner.CornerRadius = UDim.new(1, 0)
+
+	local uiStroke = Instance.new("UIStroke", actionFrame)
+	uiStroke.Thickness = 3
+	uiStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+	local uiGradient = Instance.new("UIGradient", uiStroke)
+	uiGradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(180, 100, 255)),
+		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 120, 200)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(100, 180, 255))
+	})
+	uiGradient.Rotation = 45
+
+	local actionBtn = Instance.new("TextButton", actionFrame)
+	actionBtn.Size = UDim2.new(1, 0, 1, 0)
+	actionBtn.Text = data.id
+	actionBtn.Font = Enum.Font.GothamBold
+	actionBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	actionBtn.BackgroundTransparency = 1
+
+	local dragging, dragStartPos, startPos
+
+	local function startDragging(input)
+		if not isLocked and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+			dragging = true
+			dragStartPos = input.Position
+			startPos = actionFrame.Position
+		end
+	end
+
+	actionBtn.InputBegan:Connect(startDragging)
+	actionFrame.InputBegan:Connect(startDragging)
+
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			local delta = input.Position - dragStartPos
+			local viewportSize = workspace.CurrentCamera.ViewportSize
+			local newX = startPos.X.Scale * viewportSize.X + startPos.X.Offset + delta.X
+			local newY = startPos.Y.Scale * viewportSize.Y + startPos.Y.Offset + delta.Y
+			local clampedX = math.clamp(newX, 0, viewportSize.X - actionFrame.AbsoluteSize.X)
+			local clampedY = math.clamp(newY, 0, viewportSize.Y - actionFrame.AbsoluteSize.Y)
+			actionFrame.Position = UDim2.new(0, clampedX, 0, clampedY)
+		end
+	end)
+
+	local isToggled = false
+	local isCooldownDisplaying = false
+
+	local function triggerAction()
+		if not data.enabled then return end
+
+		if data.cooldown and data.cooldown > 0 and not isCooldownDisplaying then
+			isCooldownDisplaying = true
+			task.spawn(function()
+				local timeLeft = data.cooldown
+				while timeLeft > 0 do
+					actionBtn.Text = tostring(timeLeft)
+					task.wait(1)
+					timeLeft = timeLeft - 1
+				end
+				actionBtn.Text = data.id
+				applySingleButtonSize(data, data.size)
+				isCooldownDisplaying = false
+			end)
+		end
+
+		local char = player.Character or player.CharacterAdded:Wait()
+		local humanoid = char:FindFirstChildOfClass("Humanoid")
+		local hrp = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("UpperTorso")
+		local currentBackpack = player:WaitForChild("Backpack")
+		if not humanoid then return end
+
+		-- 🆕 เพิ่มการเช็ค customType = "equip_only" (สวมใส่โดยไม่Activate)
+		if data.customType == "equip_only" then
+			local item = findTool(data.search, data.exclude)
+			if item and currentBackpack then
+				if item.Parent == currentBackpack then 
+					humanoid:EquipTool(item) 
+				end
+			end
+		elseif data.customType == "potion_reset" then
+			local item = findTool(data.search, data.exclude)
+			if item and currentBackpack then
+				if item.Parent == currentBackpack then 
+					humanoid:EquipTool(item) 
+					task.wait(0.05) 
+				end
+				item:Activate()
+			end
+
+			if humanoid and hrp then
+				humanoid.BreakJointsOnDeath = true
+				humanoid.PlatformStand = true
+				humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+				hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+				hrp.AssemblyLinearVelocity = Vector3.new(0, 1000000, 0)
+			end
+		elseif data.customType == "sentry_combo" then
+			local normalSentry = findTool({"sentry", "turret", "ป้อม"}, {"candy"})
+			local candySentry = findTool({"candy sentry", "candy"}, nil)
+
+			if normalSentry then
+				if normalSentry.Parent == currentBackpack then humanoid:EquipTool(normalSentry) task.wait(0.12) end
+				normalSentry:Activate()
+				task.wait(0.2)
+			end
+
+			if candySentry then
+				if candySentry.Parent == currentBackpack then humanoid:EquipTool(candySentry) task.wait(0.12) end
+				candySentry:Activate()
+			end
+		elseif data.auto then
+			isToggled = not isToggled
+			actionBtn.TextColor3 = isToggled and Color3.fromRGB(0, 255, 127) or Color3.fromRGB(255, 255, 255)
+			
+			pbToggleState.isToggled = isToggled
+			pbToggleState.stopFunction = function()
+				isToggled = false
+				actionBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+				pbToggleState.isToggled = false
+			end
+
+			task.spawn(function()
+				while isToggled and data.enabled do
+					local item = findTool(data.search, data.exclude)
+					local activeChar = player.Character
+					local activeHumanoid = activeChar and activeChar:FindFirstChildOfClass("Humanoid")
+					local activeBackpack = player:FindFirstChild("Backpack")
+
+					if item and activeHumanoid then
+						if activeBackpack and item.Parent == activeBackpack then 
+							activeHumanoid:EquipTool(item) 
+							task.wait(0.05) 
+						end
+						item:Activate()
+					end
+					task.wait(0.01)
+				end
+				if pbToggleState.stopFunction then
+					pbToggleState.isToggled = false
+				end
+			end)
+		else
+			local item = findTool(data.search, data.exclude)
+			if item then
+				if item.Parent == currentBackpack then humanoid:EquipTool(item) task.wait(0.1) end
+				item:Activate()
+			end
+		end
+	end
+
+	actionBtn.MouseButton1Click:Connect(function()
+		triggerAction()
+	end)
+
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			if dragging then
+				dragging = false
+				saveConfig()
+			end
+		end
+	end)
+
+	if data.auto then
+		UserInputService.InputBegan:Connect(function(input, gameProcessed)
+			if not gameProcessed and input.KeyCode == Enum.KeyCode.P then triggerAction() end
+		end)
+	end
+
+	local toggleItemBtn = Instance.new("TextButton", menuFrame)
+	toggleItemBtn.Size = UDim2.new(0.65, 0, 0, 24)
+	toggleItemBtn.Position = UDim2.new(0.05, 0, 0.20 + ((i - 1) * 0.105), 0)
+	toggleItemBtn.BackgroundColor3 = data.enabled and Color3.fromRGB(40, 150, 60) or Color3.fromRGB(150, 40, 40)
+	toggleItemBtn.BackgroundTransparency = 0.65
+	toggleItemBtn.Text = data.name .. (data.enabled and ": ON" or ": OFF")
+	toggleItemBtn.Font = Enum.Font.Gotham
+	toggleItemBtn.TextSize = 11
+	toggleItemBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	toggleItemBtn.ZIndex = 2
+
+	local itemCorner = Instance.new("UICorner", toggleItemBtn)
+	itemCorner.CornerRadius = UDim.new(0, 4)
+
+	local itemSizeBox = Instance.new("TextBox", menuFrame)
+	itemSizeBox.Size = UDim2.new(0.22, 0, 0, 24)
+	itemSizeBox.Position = UDim2.new(0.73, 0, 0.20 + ((i - 1) * 0.105), 0)
+	itemSizeBox.BackgroundColor3 = Color3.fromRGB(30, 20, 40)
+	itemSizeBox.BackgroundTransparency = 0.4
+	itemSizeBox.Text = tostring(data.size)
+	itemSizeBox.Font = Enum.Font.GothamBold
+	itemSizeBox.TextSize = 11
+	itemSizeBox.TextColor3 = Color3.fromRGB(0, 255, 200)
+	itemSizeBox.ZIndex = 2
+
+	local sizeBoxCorner = Instance.new("UICorner", itemSizeBox)
+	sizeBoxCorner.CornerRadius = UDim.new(0, 4)
+
+	local sizeBoxStroke = Instance.new("UIStroke", itemSizeBox)
+	sizeBoxStroke.Thickness = 1
+	sizeBoxStroke.Color = Color3.fromRGB(180, 100, 255)
+
+	itemSizeBox.FocusLost:Connect(function()
+		local num = tonumber(itemSizeBox.Text)
+		if num then
+			applySingleButtonSize(data, num)
+			itemSizeBox.Text = tostring(data.size)
+		else
+			itemSizeBox.Text = tostring(data.size)
+		end
+	end)
+
+	toggleItemBtn.MouseButton1Click:Connect(function()
+		data.enabled = not data.enabled
+		actionFrame.Visible = data.enabled
+		if data.enabled then
+			toggleItemBtn.Text = data.name .. ": ON"
+			toggleItemBtn.BackgroundColor3 = Color3.fromRGB(40, 150, 60)
+		else
+			toggleItemBtn.Text = data.name .. ": OFF"
+			toggleItemBtn.BackgroundColor3 = Color3.fromRGB(150, 40, 40)
+			isToggled = false
+			actionBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		end
+		saveConfig()
+	end)
+
+	applySingleButtonSize(data, data.size)
+end
